@@ -173,9 +173,12 @@ def list_films(
     # Handle multiple languages (new parameter takes priority)
     selected_languages = languages if languages else ([language] if language else [])
     if selected_languages:
-        placeholders = ','.join(['?' for _ in selected_languages])
-        clauses.append(f"language IN ({placeholders})")
-        params.extend(selected_languages)
+        # Filter out empty strings and None values
+        selected_languages = [lang for lang in selected_languages if lang]
+        if selected_languages:
+            placeholders = ','.join(['?' for _ in selected_languages])
+            clauses.append(f"language IN ({placeholders})")
+            params.extend(selected_languages)
     
     if q:
         clauses.append("film_name LIKE ?")
