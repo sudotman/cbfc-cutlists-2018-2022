@@ -161,12 +161,8 @@ def list_films(
     conn = get_conn()
     cur = conn.cursor()
 
-    # Modified SQL to include has_cuts calculation based on "Applied Running Time"
-    sql = """
-    SELECT films.*, 
-           EXISTS (SELECT 1 FROM cuts WHERE film_id = films.id AND LOWER(cut_text) LIKE '%applied running time%') as has_cuts 
-    FROM films 
-    """
+    # Optimized SQL using precomputed has_cuts column
+    sql = "SELECT * FROM films "
     clauses = []
     params = []
     
@@ -184,11 +180,11 @@ def list_films(
         clauses.append("film_name LIKE ?")
         params.append(f"%{q}%")
 
-    cuts_subquery = "EXISTS (SELECT 1 FROM cuts WHERE film_id = films.id AND LOWER(cut_text) LIKE '%applied running time%')"
+    # Use precomputed has_cuts column for massive performance improvement
     if category == "cuts":
-        clauses.append(cuts_subquery)
+        clauses.append("has_cuts = 1")
     elif category == "others":
-        clauses.append(f"NOT {cuts_subquery}")
+        clauses.append("has_cuts = 0")
 
     if year:
         clauses.append("SUBSTR(cert_date, -4) = ?")

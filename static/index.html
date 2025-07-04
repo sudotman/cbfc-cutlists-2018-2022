@@ -332,16 +332,8 @@ async function loadFilms(append = false, fetchAll = false) {
   params.append("limit", fetchAll ? "10000" : "50");
   params.append("skip", filmsCurrentPage * 50);
   
-  // Enhanced debug logging
-  console.log('=== Film Request Debug ===');
-  console.log('Category selected:', category);
-  console.log('Languages:', selectedLanguages);
-  console.log('Year:', year);
-  console.log('Title:', title);
-  console.log('Fetch All:', fetchAll);
-  console.log('Page:', filmsCurrentPage);
-  console.log('API URL:', `/films?${params.toString()}`);
-  console.log('URL Search Params:', Object.fromEntries(params));
+  // Debug logging (reduced for performance)
+  console.log(`Fetching ${selectedLanguages.length ? selectedLanguages.length + ' languages' : 'all languages'}, category: ${category || 'all'}, page: ${filmsCurrentPage}`);
   
   try {
     const response = await fetch(`/films?${params.toString()}`);
