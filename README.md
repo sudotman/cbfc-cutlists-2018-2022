@@ -97,7 +97,7 @@ the application has been optimized for fast query performance:
 * **full-text search**: uses sqlite fts5 for fast cut content search
 * **frontend performance**: virtual scrolling handles large result sets smoothly
 
-the major performance breakthrough came from optimizing the "With Cuts" filter, which previously used inefficient text matching queries but now leverages the precomputed `has_cuts` boolean column.
+if a film has "cuts" is done by this empirical filter of seeing if the title has "Applied Running Time" in it's title - seems to a good heuristic to filter out certificates vs data with cuts specified.
 
 ## repository's data
 
@@ -105,6 +105,11 @@ the raw cbfc cut lists data is sourced from the internet archive:
 **source**: [central board of film certification cut lists 2018–2022](https://archive.org/details/cbfc-cutlists-2018-2022)
 
 this repository contains cut lists issued by the central board of film certification from 2018 to the end of 2022, representing the pre-screening film censorship regime in india during that period. the original data is available under public domain mark 1.0.
+
+## todo
+- data is broken (due to the OCR dump not being accurate and being cut off sometimes) - this leads to page overflows, broken sentences etc - running it through a large ML model/LLM to sanitize this and "autocomplete" some of these could be very useful to the viatility of this project.
+- incorporate a UI which is more appealing without sacrificing speed.
+- host this on the web for easy access.
 
 ## license
 
