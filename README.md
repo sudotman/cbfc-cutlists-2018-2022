@@ -20,6 +20,8 @@ pip install fastapi uvicorn pydantic anyio virtualenv
 # 3. decompress the packaged ocr files (only the first time)
 python decompress_gz.py data
 
+# 3.5. ensure you have all the data from the archive.org link below and place it in a sub-directory called "data"
+
 # 4. parse the big ocr text into structured jsonl
 python parse_cutlists.py "data/2018-2022 with letter_hocr_searchtext.txt" data/cutlists.jsonl
 
