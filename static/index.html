@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CBFC Cutlists Explorer</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; display: flex; height: 100vh; }
+    #sidebar { width: 35%; border-right: 1px solid #ccc; padding: 1rem; overflow-y: auto; }
+    #detail { flex: 1; padding: 1rem; overflow-y: auto; }
+    form { display: flex; margin-bottom: 1rem; }
+    input[type="text"] { flex: 1; padding: 0.5rem; font-size: 1rem; }
+    button { padding: 0.5rem 1rem; margin-left: 0.5rem; }
+    .result { margin-bottom: 0.5rem; cursor: pointer; padding: 0.25rem; display: flex; align-items: center; gap: 0.5rem; }
+    .result:hover { background: #f0f0f0; }
+    .snippet b { background: yellow; }
+    h2 { margin-top: 0; }
+    pre { white-space: pre-wrap; word-wrap: break-word; }
+    .group-title { font-weight: bold; margin-top: 1rem; cursor: pointer; }
+    .group-title::after { content: ' ▼'; }
+    .collapsed + .group-content { display: none; }
+    .collapsed::after { content: ' ▶'; }
+    #filmsForm { display: grid; grid-template-columns: auto 1fr; gap: 0.5rem 1rem; align-items: center; margin-bottom: 1rem; }
+    .active-film { background-color: #dbeafe !important; }
+    #filmList { height: calc(100vh - 200px); overflow-y: auto; }
+    .loader { text-align: center; padding: 1rem; }
+    .tag-cuts, .tag-other {
+        font-size: 0.7rem;
+        padding: 2px 5px;
+        border-radius: 4px;
+        font-weight: bold;
+        color: white;
+        flex-shrink: 0;
+    }
+    .tag-cuts { background-color: #28a745; }
+    .tag-other { background-color: #6c757d; }
+    
+    /* Language checkbox styling */
+    #langContainer {
+        border-radius: 4px;
+        font-size: 0.9rem;
+    }
+    #langContainer input[type="checkbox"] {
+        margin-right: 0.5rem;
+    }
+    #langContainer label {
+        cursor: pointer;
+        display: inline-block;
+        margin-bottom: 0.25rem;
+    }
+    #langContainer label:hover {
+        background-color: #f0f0f0;
+        padding: 2px 4px;
+        border-radius: 2px;
+    }
+  </style>
+</head>
+<body>
+  <div id="sidebar">
+    <div class="tabs">
+      <button id="tabSearch" class="active">Cuts Search</button>
+      <button id="tabFilms">Films</button>
+    </div>
+
+    <!-- Cuts search section -->
+    <section id="searchSection">
+      <form id="searchForm">
+        <input type="text" id="query" placeholder="Search cuts..." required />
+        <button type="submit">Search</button>
+      </form>
+      <div id="results"></div>
+    </section>
+
+    <!-- Films list section -->
+    <section id="filmsSection" style="display:none;">
+      <form id="filmsForm">
+        <label for="langContainer">Languages:</label>
+        <div id="langContainer" style="max-height: 150px; overflow-y: auto; border: 1px solid #ccc; padding: 0.5rem; background: white;">
+          <div style="margin-bottom: 0.5rem;">
+            <input type="checkbox" id="langAll" checked>
+            <label for="langAll" style="font-weight: bold;">All Languages</label>
+            <span id="langCount" style="margin-left: 1rem; font-size: 0.8rem; color: #666;"></span>
+          </div>
+          <div id="langCheckboxes"></div>
+        </div>
+        <label for="yearSelect">Year:</label>
+        <select id="yearSelect"><option value="">All</option></select>
+        <label for="filmTitle">Title:</label>
+        <input type="text" id="filmTitle" placeholder="e.g. padma" />
+        <label>Category:</label>
+        <div>
+          <input type="radio" id="catAll" name="category" value="" checked><label for="catAll">All</label>
+          <input type="radio" id="catCuts" name="category" value="cuts"><label for="catCuts">With Cuts</label>
+          <input type="radio" id="catOthers" name="category" value="others"><label for="catOthers">Others</label>
+        </div>
+        <div style="grid-column: span 2; text-align: center;">
+            <button type="button" id="fetchAllBtn">Fetch All Matching</button>
+        </div>
+      </form>
+      <div id="filmList"></div>
+    </section>
+  </div>
+
+  <div id="detail">
+    <h2>Film details</h2>
+    <div id="filmInfo"></div>
+    <h3>Cuts</h3>
+    <pre id="cuts"></pre>
+  </div>
+
+<script src="https://unpkg.com/virtual-scroll-list@1.0.4/dist/index.umd.js"></script>
+<script>
+// Fallback: provide a super-simple VirtualScrollList if the CDN script failed or
+// exposed the class under a different name.
+if (typeof window.VirtualScrollList === 'undefined') {
+  console.warn('virtual-scroll-list CDN not available – using basic fallback list.');
+  class VirtualScrollList {
+    constructor({ height = 300, itemHeight = 30, render }) {
+      this.height = height;
+      this.itemHeight = itemHeight;
+      this.renderFn = render;
+      this.items = [];
+      this.container = document.createElement('div');
+      // If height resolves to 0 (e.g., element was hidden), fall back to 100% so
+      // the list adopts its parent (#filmList) calculated height once visible.
+      if (typeof height === 'number' && height > 0) {
+        this.container.style.height = height + 'px';
+      } else {
+        this.container.style.height = '100%';
+      }
+      this.container.style.overflowY = 'auto';
+      this.container.style.boxSizing = 'border-box';
+    }
+    update(items) {
+      this.items = items || [];
+      // naive render: no virtualization but keeps API identical for now
+      this.container.innerHTML = this.items.map((it, i) => this.renderFn(it, i)).join('');
+    }
+  }
+  window.VirtualScrollList = VirtualScrollList;
+}
+</script>
+<script>
+const API_BASE = ""; // same origin
+
+async function search(query) {
+  const res = await fetch(`/search?q=${encodeURIComponent(query)}`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+async function getFilm(id) {
+  const res = await fetch(`/films/${id}`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+// Tabs handling
+const tabSearch = document.getElementById("tabSearch");
+const tabFilms = document.getElementById("tabFilms");
+const searchSection = document.getElementById("searchSection");
+const filmsSection = document.getElementById("filmsSection");
+
+tabSearch.onclick = () => switchTab("search");
+tabFilms.onclick = () => switchTab("films");
+
+function switchTab(tab) {
+  if (tab === "search") {
+    tabSearch.classList.add("active");
+    tabFilms.classList.remove("active");
+    searchSection.style.display = "block";
+    filmsSection.style.display = "none";
+  } else {
+    tabFilms.classList.add("active");
+    tabSearch.classList.remove("active");
+    searchSection.style.display = "none";
+    filmsSection.style.display = "block";
+  }
+}
+
+// Search cuts logic
+const resultsEl = document.getElementById("results");
+const form = document.getElementById("searchForm");
+form.addEventListener("submit", async e => {
+  e.preventDefault();
+  resultsEl.textContent = "Searching…";
+  const q = document.getElementById("query").value.trim();
+  if (!q) return;
+  try {
+    const data = await search(q);
+    if (data.length === 0) {
+      resultsEl.textContent = "No results.";
+      return;
+    }
+    resultsEl.innerHTML = "";
+    data.forEach(r => {
+      const div = document.createElement("div");
+      div.className = "result";
+      div.innerHTML = `<strong>${r.film_name}</strong><div class="snippet">${r.snippet}</div>`;
+      div.onclick = () => loadFilm(r.film_id);
+      resultsEl.appendChild(div);
+    });
+  } catch (err) {
+    resultsEl.textContent = `Error: ${err.message}`;
+  }
+});
+
+async function loadFilm(id) {
+  const infoEl = document.getElementById("filmInfo");
+  const cutsEl = document.getElementById("cuts");
+  infoEl.textContent = "Loading…";
+  cutsEl.textContent = "";
+  try {
+    const film = await getFilm(id);
+    infoEl.innerHTML = `<strong>${film.film_name}</strong><br/>Language: ${film.language || "-"}<br/>Cert: ${film.certificate_no || "-"}<br/>Date: ${film.cert_date || "-"}`;
+    cutsEl.textContent = film.cuts.map(c => c.cut_text).join("\n\n");
+  } catch (err) {
+    infoEl.textContent = `Error: ${err.message}`;
+  }
+}
+
+// Films list logic
+const filmListEl = document.getElementById("filmList");
+const filmsForm = document.getElementById("filmsForm");
+const langContainer = document.getElementById("langContainer");
+const langCheckboxes = document.getElementById("langCheckboxes");
+const langAll = document.getElementById("langAll");
+const yearSelect = document.getElementById("yearSelect");
+let activeFilmEl = null;
+let filmsCurrentPage = 0;
+let filmsIsLoading = false;
+let filmsHasMore = true;
+let isFullList = false;
+let currentCategory = '';
+let allFilms = [];
+
+// create virtual list instance
+const vList = new VirtualScrollList({
+  height: filmListEl.clientHeight,
+  itemHeight: 30,
+  render: (film, i) => {
+    const tagHtml = currentCategory === '' ? `<span class="tag-${film.has_cuts ? 'cuts':'other'}">${film.has_cuts?'Cuts':'Other'}</span>` : '';
+    const titleHtml = `${film.film_name}${film.language ? ` (${film.language})` : ''}`;
+    return `<div class="result" data-idx="${i}">${tagHtml}<span>${titleHtml}</span></div>`;
+  }
+});
+filmListEl.appendChild(vList.container);
+
+function resetFilmList() {
+  console.log('Resetting film list...');
+  allFilms = [];
+  vList.update(allFilms);
+  filmsCurrentPage = 0;
+  filmsHasMore = true;
+  activeFilmEl = null;
+  filmsIsLoading = false;
+  
+  // Clear any existing content
+  filmListEl.innerHTML = '';
+  
+  // Ensure the virtual list container is attached
+  if (!filmListEl.contains(vList.container)) {
+    filmListEl.appendChild(vList.container);
+  }
+}
+
+async function loadFilms(append = false, fetchAll = false) {
+  if (filmsIsLoading) return;
+  filmsIsLoading = true;
+  
+  // Better loading indication
+  if (!append) {
+      isFullList = fetchAll;
+      allFilms = []; // Clear previous films
+      vList.update([]);
+      
+      // Show loading message clearly
+      filmListEl.innerHTML = '<div class="loader" style="text-align: center; padding: 2rem; font-size: 1.2rem; color: #666;">Loading films...</div>';
+      
+      // Reset pagination
+      filmsCurrentPage = 0;
+      filmsHasMore = true;
+  }
+
+  // Get selected languages
+  const selectedLanguages = getSelectedLanguages();
+  const year = yearSelect.value;
+  const title = document.getElementById("filmTitle").value.trim();
+  currentCategory = document.querySelector('input[name="category"]:checked').value;
+  const category = currentCategory;
+  
+  const params = new URLSearchParams();
+  // Add multiple languages
+  selectedLanguages.forEach(lang => params.append("languages", lang));
+  if (year) params.append("year", year);
+  if (title) params.append("q", title);
+  if (category) params.append("category", category);
+  params.append("limit", fetchAll ? "10000" : "50");
+  params.append("skip", filmsCurrentPage * 50);
+  
+  // Enhanced debug logging
+  console.log('=== Film Request Debug ===');
+  console.log('Category selected:', category);
+  console.log('Languages:', selectedLanguages);
+  console.log('Year:', year);
+  console.log('Title:', title);
+  console.log('Fetch All:', fetchAll);
+  console.log('Page:', filmsCurrentPage);
+  console.log('API URL:', `/films?${params.toString()}`);
+  
+  try {
+    const response = await fetch(`/films?${params.toString()}`);
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    
+    const films = await response.json();
+    
+    console.log('Films returned:', films.length);
+    console.log('Sample films:', films.slice(0, 3).map(f => f.film_name));
+    
+    // Remove loader
+    const loader = filmListEl.querySelector('.loader');
+    if (loader) loader.remove();
+    
+    if (films.length === 0) {
+      filmsHasMore = false;
+      if (!append) {
+        filmListEl.innerHTML = '<div style="text-align: center; padding: 2rem; color: #888;">No films found matching your criteria.</div>';
+      }
+      return;
+    }
+    
+    if(fetchAll || films.length < 50) {
+      filmsHasMore = false;
+    }
+    
+    filmsCurrentPage++;
+    allFilms.push(...films);
+    
+    // Ensure virtual list container is properly attached
+    if (!filmListEl.contains(vList.container)) {
+      filmListEl.appendChild(vList.container);
+    }
+    
+    vList.update(allFilms);
+    
+    console.log('Total films loaded:', allFilms.length);
+    
+  } catch (err) {
+    console.error('Error loading films:', err);
+    filmListEl.innerHTML = `<div style="text-align: center; padding: 2rem; color: #d32f2f;">Error: ${err.message}</div>`;
+  } finally {
+    filmsIsLoading = false;
+  }
+}
+
+filmsForm.addEventListener("submit", e => {
+  e.preventDefault();
+  resetFilmList();
+  loadFilms(false, false);
+});
+
+const fetchAllBtn = document.getElementById("fetchAllBtn");
+fetchAllBtn.onclick = () => {
+    resetFilmList();
+    loadFilms(false, true);
+}
+
+filmsForm.onchange = (e) => {
+    // a button click also triggers onchange, so ignore it
+    if(e.target.tagName !== 'BUTTON') {
+        filmsForm.requestSubmit()
+    }
+};
+
+// listen scroll on vList.container
+vList.container.addEventListener("scroll", () => {
+  if (isFullList || filmsIsLoading || !filmsHasMore) return;
+  const { scrollTop, scrollHeight, clientHeight } = vList.container;
+  if (scrollTop + clientHeight >= scrollHeight - 100) {
+    loadFilms(true, false);
+  }
+});
+
+// click handling via event delegation
+filmListEl.addEventListener('click', (e) => {
+  const row = e.target.closest('.result');
+  if (!row) return;
+  const idx = parseInt(row.dataset.idx);
+  const film = allFilms[idx];
+  if (!film) return;
+  loadFilm(film.id);
+});
+
+// ---- Language handling functions ----
+function getSelectedLanguages() {
+  if (langAll.checked) {
+    return []; // Empty array means all languages
+  }
+  
+  const checkboxes = langCheckboxes.querySelectorAll('input[type="checkbox"]:checked');
+  return Array.from(checkboxes).map(cb => cb.value);
+}
+
+function updateLanguageCheckboxes() {
+  const checkboxes = langCheckboxes.querySelectorAll('input[type="checkbox"]');
+  const langCount = document.getElementById('langCount');
+  
+  function updateCount() {
+    const selectedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
+    if (langAll.checked) {
+      langCount.textContent = '';
+    } else if (selectedCount === 0) {
+      langCount.textContent = '';
+    } else {
+      langCount.textContent = `(${selectedCount} selected)`;
+    }
+  }
+  
+  langAll.onchange = () => {
+    if (langAll.checked) {
+      checkboxes.forEach(cb => cb.checked = false);
+    }
+    updateCount();
+  };
+  
+  checkboxes.forEach(cb => {
+    cb.onchange = () => {
+      if (cb.checked) {
+        langAll.checked = false;
+      }
+      // If no languages selected, check "All"
+      const anySelected = Array.from(checkboxes).some(checkbox => checkbox.checked);
+      if (!anySelected) {
+        langAll.checked = true;
+      }
+      updateCount();
+    };
+  });
+  
+  updateCount(); // Initial count
+}
+
+// ---- dropdown population ----
+async function populateSelect(url, selectEl){
+  try {
+    const data = await fetch(url).then(r => r.json());
+    selectEl.innerHTML = '<option value="">All</option>';
+    data.forEach(v => {
+      const opt = document.createElement('option');
+      opt.value = v;
+      opt.textContent = v;
+      selectEl.appendChild(opt);
+    });
+  } catch(err){
+    console.error('Failed to load', url, err);
+  }
+}
+
+async function populateLanguageCheckboxes() {
+  try {
+    const data = await fetch('/languages').then(r => r.json());
+    langCheckboxes.innerHTML = '';
+    data.forEach(lang => {
+      const div = document.createElement('div');
+      div.style.marginBottom = '0.25rem';
+      
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.id = `lang_${lang.replace(/[^a-zA-Z0-9]/g, '_')}`;
+      checkbox.value = lang;
+      
+      const label = document.createElement('label');
+      label.htmlFor = checkbox.id;
+      label.textContent = lang;
+      label.style.marginLeft = '0.5rem';
+      
+      div.appendChild(checkbox);
+      div.appendChild(label);
+      langCheckboxes.appendChild(div);
+    });
+    
+    updateLanguageCheckboxes();
+  } catch(err){
+    console.error('Failed to load languages', err);
+  }
+}
+
+// Populate filters on page load
+populateLanguageCheckboxes();
+populateSelect('/years', yearSelect);
+</script>
+</body>
+</html> 
