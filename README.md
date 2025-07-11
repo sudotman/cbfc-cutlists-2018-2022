@@ -1,4 +1,10 @@
 # cbfc cutlists explorer
+censorship isn't anything new to our country's film's certification body - yet this is an under-documented phenomena with not a lot of data easily accessible. you have to rely on RTI requests which can often take months to resolve properly. this is a chunk of 2018-2022 data that was scraped and OCR'd into a rough dataset. this dataset has been archived by the good folks at check [repository's data](#repository-data) below for more information
+
+
+## hosted looks like this:
+![demoScreenshot](static/demo.png)
+
 
 ## prerequisites
 
@@ -99,7 +105,7 @@ the application has been optimized for fast query performance:
 
 if a film has "cuts" is done by this empirical filter of seeing if the title has "Applied Running Time" in it's title - seems to a good heuristic to filter out certificates vs data with cuts specified.
 
-## repository's data
+## repository data
 
 the raw cbfc cut lists data is sourced from the internet archive:  
 **source**: [central board of film certification cut lists 2018–2022](https://archive.org/details/cbfc-cutlists-2018-2022)

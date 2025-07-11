@@ -55,3 +55,9 @@ coverage.xml
 *.cover
 .hypothesis/
 .pytest_cache/
+
+# Deployment
+.railway/
+fly.toml
+.env
+*.log
