@@ -41,7 +41,8 @@ venv.bak/
 # Logs and databases
 *.log
 *.sqlite3
-*.db
+# Allow our main database file
+# *.db
 
 # Unit test / coverage reports
 htmlcov/
