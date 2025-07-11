@@ -26,15 +26,17 @@ pip install fastapi uvicorn pydantic anyio virtualenv
 # 3. decompress the packaged ocr files (only the first time)
 python decompress_gz.py data
 
-# 3.5. ensure you have all the data from the archive.org link below and place it in a sub-directory called "data"
+## skip to step 5 if you don't wish to rebuild the database.
 
-# 4. parse the big ocr text into structured jsonl
+# 4.0. ensure you have all the data from the archive.org link below and place it in a sub-directory called "data"
+
+# 4.1. parse the big ocr text into structured jsonl
 python parse_cutlists.py "data/2018-2022 with letter_hocr_searchtext.txt" data/cutlists.jsonl
 
-# 5. build the sqlite database (includes full-text index)
+# 4.2. build the sqlite database (includes full-text index)
 python init_db.py data/cutlists.jsonl cbfc_cutlists.db
 
-# 6. launch everything (api + static ui)
+# 5. launch everything (api + static ui)
 python main.py                           # visit http://127.0.0.1:8000
 python main.py --host 127.0.0.1 --port 9000  # custom host/port
 python main.py --no-reload               # disable auto-reload (production)
